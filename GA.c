@@ -243,19 +243,21 @@ check_utilpower(gene_t *gene)
 	gene->cpu_power = power_new_sum_cpu;
 	gene->mem_power = power_new_sum_mem;
 	gene->power_netcom = power_new_sum_net_com;
+	
 	// power_new = power_new_sum_cpu + power_new_sum_net_com; 
 	gene->period_violation = violate_period;
-	if (util_new < 1.0 && violate_period == 0) { 
-		power_new_idle = cpufreqs[n_cpufreqs - 1].power_idle * (1 - util_new); 
+	if (util_new < 1.6 && violate_period == 0) { 
+		power_new_idle = cpufreqs[n_cpufreqs - 1].power_idle * (1.6 - util_new); 
 		power_new += power_new_idle;
 		gene->cpu_power += power_new_idle;
 	}
 	gene->util = util_new;
+
 	if (util_new <= cutoff) {
 		gene->power = power_new;
 		gene->score = power_new;
-		if (util_new >= 1.0 || violate_period > 0) 
-			gene->score += power_new * (util_new - 1.0) * penalty;
+		if (util_new >= 1.6 || violate_period > 0) 
+			gene->score += power_new * (util_new - 1.6) * penalty;
 		return TRUE;
 	}
 	return FALSE;

@@ -32,7 +32,7 @@ add_report(unsigned gen)
 	for (i = 0; i < n_pops; i++) {
 		gene = genes + i;
 		util_sum += gene->util;
-		if (gene->util <= 1.0) {
+		if (gene->util <= 1.6) {
 			power_sum += gene->power;
 			n_valid_genes++;
 		}
@@ -49,7 +49,7 @@ add_report(unsigned gen)
 
 	list_for_each (lp, &genes_by_power) {
 		gene = list_entry(genes_by_power.next, gene_t, list_power);
-		if (gene->util <= 1.0) {
+		if (gene->util <= 1.6) {
 			power_min = gene->power;
 			break;
 		}
@@ -94,6 +94,7 @@ save_task_infos(void)
 		else
 			cpufreq3++;
 	}
+
 	fclose(fp);
 	
 	printf("power: %.6lf util: %.6lf\n", gene->power, gene->util);
