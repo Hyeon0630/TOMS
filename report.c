@@ -94,6 +94,7 @@ save_task_infos(void)
 		else
 			cpufreq3++;
 	}
+
 	fclose(fp);
 	
 	printf("power: %.6lf util: %.6lf\n", gene->power, gene->util);

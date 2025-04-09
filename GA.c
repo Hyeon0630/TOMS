@@ -10,6 +10,9 @@ double		cutoff, penalty;
 extern unsigned	n_clouds; 
 extern cloud_t  clouds[MAX_CLOUDS]; 
 
+extern task_t tasks[MAX_TASKS];
+extern unsigned n_tasks;
+
 LIST_HEAD(genes_by_util);
 LIST_HEAD(genes_by_power);
 LIST_HEAD(genes_by_score);
@@ -243,6 +246,7 @@ check_utilpower(gene_t *gene)
 	gene->cpu_power = power_new_sum_cpu;
 	gene->mem_power = power_new_sum_mem;
 	gene->power_netcom = power_new_sum_net_com;
+	
 	// power_new = power_new_sum_cpu + power_new_sum_net_com; 
 	gene->period_violation = violate_period;
 	if (util_new < 1.0 && violate_period == 0) { 
@@ -251,6 +255,7 @@ check_utilpower(gene_t *gene)
 		gene->cpu_power += power_new_idle;
 	}
 	gene->util = util_new;
+
 	if (util_new <= cutoff) {
 		gene->power = power_new;
 		gene->score = power_new;
@@ -262,6 +267,19 @@ check_utilpower(gene_t *gene)
 }
 
 static void
+assign_taskattrs_offloading(taskattrs_t *taskattrs)
+{
+	int i;
+
+	for (i = 0; i < n_tasks; i++) {
+		unsigned attrtype = tasks[i].offloading_bool ? 1 : 0;
+		taskattrs->attrs[i] = attrtype;
+	}
+
+	setup_taskattrs(taskattrs);
+}
+
+static void
 init_gene(gene_t *gene)
 {
 	int	i;
@@ -269,7 +287,7 @@ init_gene(gene_t *gene)
 	assign_taskattrs(&gene->taskattrs_mem, n_mems);
 	assign_taskattrs(&gene->taskattrs_cpufreq, n_cpufreqs);
 	assign_taskattrs(&gene->taskattrs_cloud, n_clouds); 
-	assign_taskattrs(&gene->taskattrs_offloadingratio, n_offloadingratios); 
+	assign_taskattrs_offloading(&gene->taskattrs_offloadingratio); 
 
 	for (i = 0; i < MAX_TRY; i++) {
 		INIT_LIST_HEAD(&gene->list_util);
