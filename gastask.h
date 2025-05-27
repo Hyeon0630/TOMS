@@ -81,6 +81,8 @@ extern unsigned n_net_commanders;
 
 extern struct list_head	genes_by_util;
 extern struct list_head	genes_by_power;
+extern struct list_head genes_by_score;  // [추가] 비용 기준 정렬을 위해
+ 
 extern gene_t	*genes;
 extern cpufreq_t	cpufreqs[];
 extern double	offloadingratios[]; 

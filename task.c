@@ -35,7 +35,7 @@ get_task_utilpower(unsigned no_task, unsigned char mem_type, unsigned char cloud
 	transtime = (task->task_size + task->input_size)/(double)network->uplink + task->output_size/(double)network->downlink;  
 	netcomtime = net_commander->intercept_out + net_commander->intercept_in;
 	*putil = (wcet_scaled  * (1.0 - offloadingratios[offloadingratio]) + (wcet_scaled_cpu * netcomtime) * offloadingratios[offloadingratio]) / task->period; 
-	*pdeadline = (wcet_scaled_cloud * task->wcet + wcet_scaled_cpu * netcomtime + transtime) / (task->period) * offloadingratios[offloadingratio]; //gyuri 
+	*pdeadline = (wcet_scaled_cloud * task->wcet + wcet_scaled_cpu * netcomtime + transtime) / task->period * offloadingratios[offloadingratio]; //gyuri
 	cpu_power_unit = (cpufreq->power_active * wcet_scaled_cpu + cpufreq->power_idle * wcet_scaled_mem) / (wcet_scaled_cpu + wcet_scaled_mem);
 	*ppower_cpu = cpu_power_unit * (wcet_scaled / task->period) * (1 - offloadingratios[offloadingratio]) + cpu_power_unit * (netcomtime / task->period) * (offloadingratios[offloadingratio]); 
 	*ppower_net_com = net_com_power_unit * ((transtime + netcomtime) / task->period) * offloadingratios[offloadingratio];  

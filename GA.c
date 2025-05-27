@@ -10,11 +10,77 @@ double		cutoff, penalty;
 extern unsigned	n_clouds; 
 extern cloud_t  clouds[MAX_CLOUDS]; 
 
+extern task_t tasks[MAX_TASKS];
+extern unsigned n_tasks;
+
 LIST_HEAD(genes_by_util);
 LIST_HEAD(genes_by_power);
 LIST_HEAD(genes_by_score);
 
 gene_t	*genes;
+
+// 비용 계산을 위한 함수, 변수, 상수
+#define P_ELEC 0.08            // [W→USD] 전기요금 단가 (USD/kWh)
+#define C 1.8e-9               // CPU switching capacitance (F)
+const double V[] = {0.5, 0.65, 0.8, 0.95, 1.1};        // 전압 (V)
+const double F[] = {0.4e9, 0.7e9, 1.2e9, 1.6e9, 2.2e9}; // 주파수 (Hz)
+const double S[] = {5.5, 3.1, 1.8, 1.375, 1.0};
+#define P_BASELINE 3.5        // 베이스라인 전력 (W)
+#define K_DYN 2e-3            // 동적 메모리 전력 계수 (W/MB)
+#define K_STAT 0.5e-3         // 정적 메모리 전력 계수 (W/MB)
+#define ALPHA_USE 0.6         // 사용하는 쪽 부담 비율
+#define ALPHA_LEND 0.4        // 제공하는 쪽 수익 비율
+#define BETA 0.2              // 마진율
+#define HW_COST 2000.0        // MEC 장비 원가 (USD)
+#define DEP_PERIOD_SEC 94608000.0  // 3년 = 3*365*24*60*60 초
+#define P_MEC 0.06            // MEC 서버 전력 (kW) 60W = 0.06kW
+#define ALL_Period 94608000.0        // 3년으로 설정 (수정하면서 실험 필요)
+
+extern task_t tasks[];
+
+// [LOCAL] 로컬 실행 비용 계산 함수
+double compute_local_cost_per_sec(const task_t *task, int cpufreq_idx) {
+    double wcet = task->wcet / 1000;  // [s] 워스트케이스 실행시간 초로 변경 위해 1000을 나눔
+    double period = task->period / 1000;  // [s] task 주기 초로 변경을 위해 1000을 나눔
+    double v = V[cpufreq_idx];  // 전압
+    double f = F[cpufreq_idx];  // 주파수
+    double s = S[cpufreq_idx];  // Scaled(WCET) 계산을 위한 S
+
+    // CPU 소비 에너지 (E = C·V²·f·Scaled(WCET)·(ALL_Period/Period))
+    double e_cpu = C * v * v * f * wcet * s / period;
+
+    // 메모리 에너지 (active, static 모두 고려)
+    double size_mb = task->memreq / 1000; // 750KB = 0.75MB
+    double gamma = task->mem_active_ratio; 
+    double e_mem = size_mb * (gamma * K_DYN + K_STAT) / period;
+
+    // 시스템 베이스라인 전력
+    double e_base = P_BASELINE;
+
+    double total_energy = (e_cpu + e_mem + e_base) *  ALL_Period; // [Wh]
+    return (total_energy / 3600000.0) * P_ELEC;       // [USD]
+}
+
+// [PUBLIC] public edge 실행 비용 계산 함수
+double compute_mutual_cost_per_sec(const task_t *task, const cloud_t *cloud, double uplink, double downlink) {
+    double period = task->period / 1000;  // [s] task 주기 초로 변경을 위해 1000을 나눔
+
+    double t_upload = task->input_size * 1024 * 8.0 / (uplink * 1e6);    // 1KB = 1024 byte = 1024 * 8 bit → sec
+    double t_download = task->output_size * 1024 * 8.0 / (downlink * 1e6);
+    double t_net = t_upload + t_download;
+
+    double e_net = 1.2 * t_net * (ALL_Period / period);          // 네트워크 전력: 1.2W
+    
+    double net_cost = (e_net / 3600000.0) * P_ELEC; // [USD]
+
+    double cpu_cost = (P_MEC * (ALL_Period / 3600.0)) * P_ELEC;
+    
+    // HW 비용 
+    double rental_cost = 0.0832 * (ALL_Period / 3600.0);
+
+    return net_cost + cpu_cost + rental_cost;  // [USD]
+}
+
 
 #if 0
 static void
@@ -49,6 +115,19 @@ setup_taskattrs(taskattrs_t *taskattrs)
 			taskattrs->max_type = attrtype;
 		}
 	}
+}
+
+static void
+assign_taskattrs_offloading(taskattrs_t *taskattrs)
+{
+	int i;
+
+	for (i = 0; i < n_tasks; i++) {
+		unsigned attrtype = 1;
+		taskattrs->attrs[i] = attrtype;
+	}
+
+	setup_taskattrs(taskattrs);
 }
 
 static void
@@ -215,19 +294,27 @@ check_utilpower(gene_t *gene)
 	int	i, violate_period = 0, num_offloading = 0; 
 	// int violate_offloading = 0; 
 
+	double total_cost = 0;                     // [추가] 비용 기반 최적화 실험을 위한 cost 누적 변수
+						 
 	for (i = 0; i < n_tasks; i++) {
 		double	task_util, task_power_cpu, task_power_mem, task_power_net_com, task_deadline;
 		
-		get_task_utilpower(i, gene->taskattrs_mem.attrs[i], gene->taskattrs_cloud.attrs[i], gene->taskattrs_cpufreq.attrs[i], gene->taskattrs_offloadingratio.attrs[i],
-				   &task_util, &task_power_cpu, &task_power_mem, &task_power_net_com, &task_deadline); //gyuri
+		get_task_utilpower(i, gene->taskattrs_mem.attrs[i], gene->taskattrs_cloud.attrs[i], gene->taskattrs_cpufreq.attrs[i], gene->taskattrs_offloadingratio.attrs[i], &task_util, &task_power_cpu, &task_power_mem, &task_power_net_com, &task_deadline); //gyuri
 		util_new += task_util;
 		power_new_sum_cpu += task_power_cpu;
 		power_new_sum_mem += task_power_mem;
 		power_new_sum_net_com += task_power_net_com;
+
 		if(task_deadline > 1.0) 
 			violate_period ++;
-		if((unsigned)gene->taskattrs_offloadingratio.attrs[i] != 0)
+		// [추가] 비용 계산을 위한 수정
+		if((unsigned)gene->taskattrs_offloadingratio.attrs[i] != 0){
+			const cloud_t *cloud = &clouds[gene->taskattrs_cloud.attrs[i]];
+			total_cost += compute_mutual_cost_per_sec(&tasks[i], cloud, 120.0, 120.0);
 			num_offloading++;
+		} else {
+            		total_cost += compute_local_cost_per_sec(&tasks[i], gene->taskattrs_cpufreq.attrs[i]);
+        	}
 	}
 	/*
 	for(i = 0; i < n_clouds; i++) 
@@ -247,7 +334,7 @@ check_utilpower(gene_t *gene)
 	// power_new = power_new_sum_cpu + power_new_sum_net_com; 
 	gene->period_violation = violate_period;
 	if (util_new < 1.6 && violate_period == 0) { 
-		power_new_idle = cpufreqs[n_cpufreqs - 1].power_idle * (1.6 - util_new); 
+		power_new_idle = cpufreqs[n_cpufreqs - 1].power_idle * (1 - util_new); 
 		power_new += power_new_idle;
 		gene->cpu_power += power_new_idle;
 	}
@@ -255,9 +342,9 @@ check_utilpower(gene_t *gene)
 
 	if (util_new <= cutoff) {
 		gene->power = power_new;
-		gene->score = power_new;
+		gene->score = total_cost; // [추가] power_new에서 total_cost로 수정
 		if (util_new >= 1.6 || violate_period > 0) 
-			gene->score += power_new * (util_new - 1.6) * penalty;
+			gene->score += total_cost * (util_new - 1.6) * penalty;  // [추가] power_new에서 total_cost로 수정 만약 패널티 무시의 경우 return FALSE;
 		return TRUE;
 	}
 	return FALSE;
@@ -271,7 +358,7 @@ init_gene(gene_t *gene)
 	assign_taskattrs(&gene->taskattrs_mem, n_mems);
 	assign_taskattrs(&gene->taskattrs_cpufreq, n_cpufreqs);
 	assign_taskattrs(&gene->taskattrs_cloud, n_clouds); 
-	assign_taskattrs(&gene->taskattrs_offloadingratio, n_offloadingratios); 
+	assign_taskattrs_offloading(&gene->taskattrs_offloadingratio);
 
 	for (i = 0; i < MAX_TRY; i++) {
 		INIT_LIST_HEAD(&gene->list_util);

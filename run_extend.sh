@@ -25,15 +25,15 @@ gastask_conf=./tmp/gastask_$utilTarget+$$.conf
 COMMON_CONF="\
 # max_generations n_populations cutoff penalty
 *genetic
-10000 100 3.0 1.5
+10000 100 10.0 1.5
 
 # wcet_min wcet_max mem_total util_cpu util_target n_tasks task_size_min task_size_max input_size_min input_size_max output_size_min output_size_max
 *gentask
-500 1000 2000 $utilCpu $utilTarget 100 4000 6000 800 4000 800 2000
+500 1000 45000000 $utilCpu $utilTarget 100 500 750 100 500 100 250
 
 # uplink_min uplink_max downlink_min downlink_max n_networks
 *gennetwork
-$networkUp $networkUp $networkDown $networkDown 100
+30 30 120 120 100
 
 # intercept_out_min intercept_out_max intercept_in_min intercept_in_max n_net_commanders
 *gennetcommander
@@ -42,22 +42,21 @@ $networkUp $networkUp $networkDown $networkDown 100
 # wcet_scale power_active power_idle
 *cpufreq
 1    100    1
-0.5  25   0.25
+0.564  31.8096 0.318096
+0.327 10.6929 0.106929
 0.25 6.25 0.0625
-0.125 1.5625 0.015625
+0.182 3.3124 0.03124
 
 # type max_capacity wcet_scale power_active power_idle
 *mem
-dram  1000 1    0.01   0.01
-nvram 1000 0.8  0.01   0.0001
+dram  45000000 1    0.01   0.001
 
 # type computation_power power_active power_idle max_capacity offloading_limit
 *cloud
-mec  2   400   100   100000   1.0
+mec  10   60   3.5   45000000   1.0
 
 # offloading_ratio 
 *offloadingratio
-0
 1
 
 # uplink_data_rate downlink_data_rate
@@ -90,34 +89,11 @@ touch $OUTPUT/output_$utilTarget+$networkUp.txt
 echo "*tovs\n" >> $OUTPUT/output_$utilTarget+$networkUp.txt
 ./gastask -s $seed $gastask_conf | tee -a $OUTPUT/output_$utilTarget+$networkUp.txt
 mv task.txt $OUTPUT/task_$utilTarget+$networkUp+tovs.txt
-sed -i '20s/0.5/#0.5/' $gastask_conf
-sed -i '21s/0.25/#0.25/' $gastask_conf
-sed -i '22s/0.125/#0.125/' $gastask_conf
+# sed -i '36s/1/#1/' $gastask_conf
 
-echo "\n*offloading\n" >> $OUTPUT/output_$utilTarget+$networkUp.txt
-./gastask -s $seed $gastask_conf | tee -a $OUTPUT/output_$utilTarget+$networkUp.txt
-mv task.txt $OUTPUT/task_$utilTarget+$networkUp+offloading.txt
-
-sed -i '20s/#0.5/0.5/' $gastask_conf
-sed -i '21s/#0.25/0.25/' $gastask_conf
-sed -i '22s/#0.125/0.125/' $gastask_conf
-
-sed -i '36s/1/#1/' $gastask_conf
-
-echo "\n*dvfs\n" >> $OUTPUT/output_$utilTarget+$networkUp.txt
-./gastask -s $seed $gastask_conf | tee -a $OUTPUT/output_$utilTarget+$networkUp.txt
-mv task.txt $OUTPUT/task_$utilTarget+$networkUp+dvfs.txt
-
-sed -i '20s/0.5/#0.5/' $gastask_conf
-sed -i '21s/0.25/#0.25/' $gastask_conf
-sed -i '22s/0.125/#0.125/' $gastask_conf
-echo "\n*nothing\n" >> $OUTPUT/output_$utilTarget+$networkUp.txt
-./gastask -s $seed $gastask_conf | tee -a $OUTPUT/output_$utilTarget+$networkUp.txt
-mv task.txt $OUTPUT/task_$utilTarget+$networkUp+nothing.txt
-
-sed -i '20s/#0.5/0.5/' $gastask_conf
-sed -i '21s/#0.25/0.25/' $gastask_conf
-sed -i '22s/#0.125/0.125/' $gastask_conf
-sed -i '36s/#1/1/' $gastask_conf
+# echo "\n*dvfs\n" >> $OUTPUT/output_$utilTarget+$networkUp.txt
+# ./gastask -s $seed $gastask_conf | tee -a $OUTPUT/output_$utilTarget+$networkUp.txt
+# mv task.txt $OUTPUT/task_$utilTarget+$networkUp+dvfs.txt
+# sed -i '36s/#1/1/' $gastask_conf
 
 mv $gastask_conf $OUTPUT/gastask_$utilTarget+$$.conf
